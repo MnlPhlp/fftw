@@ -54,7 +54,7 @@ jobs:
     - uses: actions-rs/cargo@v1
       with:
         command: test
-        args: > 
+        args: >
           --all-targets
           --manifest-path=fftw/Cargo.toml
           --target aarch64-apple-ios
@@ -75,11 +75,14 @@ jobs:
     - name: Show env
       env:
         OUTPUT_NDK_PATH: ${{ steps.setup-ndk.outputs.ndk-path }}
-      run: > 
+      run: >
         ls /usr/local/lib/android/sdk/ndk/;
         echo ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT;
         echo ${{ steps.setup-ndk.outputs.ndk-path }};
         echo output-ndk-path=$OUTPUT_NDK_PATH;
+    - uses: actions/checkout@v1
+    - name: Install targets
+      run: rustup target install aarch64-linux-android armv7-linux-androideabi
     - uses: actions-rs/cargo@v1
       with:
         command: test
