@@ -191,7 +191,7 @@ fn main() {
                                 .into_os_string(),
                         );
                         sysroot = format!(
-                            "--with-sysroot={}/platforms/android-21/arch-arm64",
+                            "--with-sysroot={}/toolchains/llvm/prebuilt/linux-x86_64/sysroot",
                             ndk_root.display()
                         );
                     }
@@ -207,7 +207,7 @@ fn main() {
                                 .into_os_string(),
                         );
                         sysroot = format!(
-                            "--with-sysroot={}/platforms/android-21/arch-arm",
+                            "--with-sysroot={}/toolchains/llvm/prebuilt/linux-x86_64/sysroot",
                             ndk_root.display()
                         );
                     }
