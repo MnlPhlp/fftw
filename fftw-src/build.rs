@@ -1,5 +1,4 @@
 use anyhow::Result;
-use cc;
 use std::env::{set_var, var};
 use std::fs::{canonicalize, File};
 use std::io::{copy, Write};
@@ -21,7 +20,7 @@ fn download_archive_windows(out_dir: &Path) -> Result<()> {
         let buf = conn.simple_retr("fftw-3.3.5-dll64.zip")?.into_inner();
         // TODO calc checksum
         let mut f = File::create(&archive)?;
-        f.write(&buf)?;
+        f.write_all(&buf)?;
     }
     let f = File::open(&archive)?;
     let mut zip = ZipArchive::new(f)?;
@@ -61,7 +60,7 @@ fn build_unix(out_dir: &Path, flags: &[&str]) {
     )
     .unwrap();
     if !out_dir.join("lib/libfftw3.a").exists() {
-        build_fftw(flags, &out_src_dir, &out_dir);
+        build_fftw(flags, &out_src_dir, out_dir);
     }
     if !out_dir.join("lib/libfftw3f.a").exists() {
         let mut flags = flags.to_vec();
@@ -69,7 +68,7 @@ fn build_unix(out_dir: &Path, flags: &[&str]) {
         if var("CARGO_CFG_TARGET_ARCH").unwrap().starts_with("armv7") {
             flags.push("--enable-neon");
         }
-        build_fftw(&flags, &out_src_dir, &out_dir);
+        build_fftw(&flags, &out_src_dir, out_dir);
     }
 }
 
@@ -83,12 +82,12 @@ fn build_fftw(flags: &[&str], src_dir: &Path, out_dir: &Path) {
             .arg("--with-combined-threads")
             .arg(format!("--prefix={}", out_dir.display()))
             .args(flags)
-            .current_dir(&src_dir),
+            .current_dir(src_dir),
     );
     run(Command::new("make")
         .arg(format!("-j{}", var("NUM_JOBS").unwrap()))
-        .current_dir(&src_dir));
-    run(Command::new("make").arg("install").current_dir(&src_dir));
+        .current_dir(src_dir));
+    run(Command::new("make").arg("install").current_dir(src_dir));
 }
 
 fn run(command: &mut Command) -> String {
@@ -104,7 +103,7 @@ fn run(command: &mut Command) -> String {
                     unsafe { String::from_utf8_unchecked(output.stderr) }
                 );
             }
-            return String::from_utf8(output.stdout).unwrap();
+            String::from_utf8(output.stdout).unwrap()
         }
         Err(error) => {
             panic!("failed to execute `{:?}`: {}", command, error);
@@ -134,8 +133,7 @@ fn main() {
                 .get_compiler();
             set_var("CC", tool.cc_env());
             set_var("CFLAGS", tool.cflags_env());
-            let sysroot =
-                run(Command::new("xcrun").args(&["--sdk", "iphoneos", "--show-sdk-path"]));
+            let sysroot = run(Command::new("xcrun").args(["--sdk", "iphoneos", "--show-sdk-path"]));
             let args = &[
                 &format!("--with-sysroot={}", sysroot.trim()),
                 "--host=arm-apple-darwin",
@@ -162,9 +160,8 @@ fn main() {
                         None
                     }
                 });
-            let ndk_root: PathBuf = var("ANDROID_NDK_ROOT")
-                .map_err(|_| var("ANDROID_NDK_HOME"))
-                .expect("ndk not found, please set ANDROID_NDK_ROOT to where ndk installed.")
+            let ndk_root: PathBuf = var("ANDROID_NDK_HOME")
+                .expect("ndk not found, please set ANDROID_NDK_HOME to where ndk installed.")
                 .into();
             let mut sysroot: String = "".to_string();
             if cc.is_none() {
@@ -175,19 +172,19 @@ fn main() {
                     .join(&format!("{}-{}", triple[2], triple[0]))
                     .join("bin");
                 if !toolchain.exists() {
-                    panic!(format!(
+                    panic!(
                         "Unsupported platform {}, ndk toolchain dose not exists, {}!",
                         host,
                         toolchain.display()
-                    ));
+                    );
                 };
                 match target.as_str() {
                     "aarch64-linux-android" => {
-                        set_var("AR", toolchain.join("aarch64-linux-android-ar"));
-                        set_var("AS", toolchain.join("aarch64-linux-android-as"));
-                        set_var("LD", toolchain.join("aarch64-linux-android-ld"));
-                        set_var("STRIP", toolchain.join("aarch64-linux-android-strip"));
-                        set_var("RANLIB", toolchain.join("aarch64-linux-android-ranlib"));
+                        set_var("AR", toolchain.join("llvm-ar"));
+                        set_var("AS", toolchain.join("llvm-as"));
+                        set_var("LD", toolchain.join("ld"));
+                        set_var("STRIP", toolchain.join("llvm-strip"));
+                        set_var("RANLIB", toolchain.join("llvm-ranlib"));
                         cc = Some(
                             toolchain
                                 .join("aarch64-linux-android21-clang")
@@ -199,11 +196,11 @@ fn main() {
                         );
                     }
                     "armv7-linux-androideabi" => {
-                        set_var("AR", toolchain.join("arm-linux-androideabi-ar"));
-                        set_var("AS", toolchain.join("arm-linux-androideabi-as"));
-                        set_var("LD", toolchain.join("arm-linux-androideabi-ld"));
-                        set_var("STRIP", toolchain.join("arm-linux-androideabi-strip"));
-                        set_var("RANLIB", toolchain.join("arm-linux-androideabi-ranlib"));
+                        set_var("AR", toolchain.join("llvm-ar"));
+                        set_var("AS", toolchain.join("llvm-as"));
+                        set_var("LD", toolchain.join("ld"));
+                        set_var("STRIP", toolchain.join("llvm-strip"));
+                        set_var("RANLIB", toolchain.join("llvm-ranlib"));
                         cc = Some(
                             toolchain
                                 .join("armv7a-linux-androideabi21-clang")
@@ -222,11 +219,9 @@ fn main() {
             set_var("CFLAGS", tool.cflags_env());
             set_var("CC", cc.unwrap());
             let cross = format!("--host={}", target);
-            if target.starts_with("arm") {
-                build_unix(&out_dir, &[cross.as_str(), sysroot.as_str()]);
-            } else {
-                build_unix(&out_dir, &[cross.as_str(), sysroot.as_str()]);
-            }
+
+            build_unix(&out_dir, &[cross.as_str(), sysroot.as_str()]);
+
             println!("cargo:rustc-link-search={}", out_dir.join("lib").display());
             println!("cargo:rustc-link-lib=static=fftw3");
             println!("cargo:rustc-link-lib=static=fftw3f");
